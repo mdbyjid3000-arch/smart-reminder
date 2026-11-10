@@ -1,0 +1,65 @@
+name: Build Smart Reminder APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Find the project (works for a normal repo or an uploaded ZIP)
+        run: |
+          if [ -f settings.gradle.kts ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          else
+            ZIP=$(ls ./*.zip | head -n 1)
+            echo "Using $ZIP"
+            mkdir -p _proj
+            unzip -q "$ZIP" -d _proj
+            DIR=$(dirname "$(find _proj -name settings.gradle.kts | head -n 1)")
+            echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" out/SmartReminder.apk
+
+      - name: Save APK as a build file
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartReminder-APK
+          path: out/SmartReminder.apk
+
+      - name: Publish APK as a download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Smart Reminder APK ${{ github.run_number }}
+          files: out/SmartReminder.apk
